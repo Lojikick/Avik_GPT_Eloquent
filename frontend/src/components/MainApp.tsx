@@ -82,14 +82,14 @@ const MainApp: React.FC = () => {
         <GuestBanner />
         
         {/* Main content - conditionally render homepage or chat */}
-        <div className="flex-1 flex flex-col">
+        <div className="flex-1 flex flex-col min-h-0">
           {currentView === 'homepage' ? (
             <Homepage onNewChatClick={handleNewChat} />
           ) : (
             <Chat 
               currentSessionId={currentSessionId}
-              initialMessage={initialMessage}           // Auto-send this message when chat loads
-              onMessageSent={() => setInitialMessage(null)}  // Clear initial message after sending
+              initialMessage={initialMessage}
+              onMessageSent={() => setInitialMessage(null)}
             />
           )}
         </div>

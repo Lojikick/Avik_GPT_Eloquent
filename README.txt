@@ -104,6 +104,8 @@ npx next dev -p 3000
 - **LangChain** - AI framework
 - **Google Gemini** - Language model
 
+(Note: Text below is long I know, but all written by me! No AI used for this part haha)
+
 I first approached this problem by implementing the FastAPI backend, the first task being implementing the RAG Chat pipeline. I first figured out how to retrieve similar
 vector embeddings to a query from the PineconeDB, then setup a chain between the PineconeDB and my LLM, Gemini 2.5 via Langchain. I wrapped this pipeline up in a proper API call
 to get a response from a prompt using FastAPI, and then moved on to build a simple frontend

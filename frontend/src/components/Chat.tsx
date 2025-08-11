@@ -8,7 +8,6 @@ import { Message } from '@/types/message';
 // Fetches conversation data from the backend via the currentSessionId passed in from the MainApp component 
 // Handles the transaction flow of: receive initial message → auto-send → load history → handle new messages → manage loading states → auto-scroll
 
-
 // Props interface - manages chat session and initial message handling
 interface ChatProps {
     currentSessionId: string | null;    // Active chat session ID
@@ -138,15 +137,18 @@ const Chat: React.FC<ChatProps> = ({
   };
 
   return (
-    <div className='h-screen flex flex-col max-w-4xl mx-auto text-black'>
+    <div className='flex flex-col h-full w-full max-w-4xl mx-auto text-black'>
         {/* Fixed header */}
-        <h1 className='text-center text-2xl font-bold py-4 flex-shrink-0'>AvikGPT</h1>
+        <div className='flex-shrink-0 py-4 border-b border-gray-200'>
+            <h1 className='text-center text-2xl font-bold'>AvikGPT</h1>
+        </div>
 
-        {/* Scrollable messages area */}
+        {/* Scrollable messages area - takes remaining space */}
         <div 
             ref={messagesContainerRef}
-            className='flex-1 overflow-y-auto space-y-4 px-4'
+            className='flex-1 overflow-y-auto px-4 py-4 min-h-0'
         >
+            <div className='space-y-4'>
                 {/* Show placeholder when no messages */}
                 {messages.length === 0 ? (
                     <div className='flex items-center justify-center h-64 text-gray-500'>
@@ -157,20 +159,20 @@ const Chat: React.FC<ChatProps> = ({
                     messages.map((message) => (
                         <div key={message.id}>
                             {message.type === 'user' ? (
-                                // User message - right-aligned, purple background
+                                // User message - right-aligned, purple background, consistent max width
                                 <div className='flex justify-end'>
-                                    <div className='max-w-xs lg:max-w-md px-4 py-2 bg-purple-500 text-white rounded-2xl rounded-br-md'>
-                                        <p>{message.content}</p>
+                                    <div className='max-w-md px-4 py-2 bg-purple-500 text-white rounded-2xl rounded-br-md'>
+                                        <p className='break-words'>{message.content}</p>
                                     </div>
                                 </div>
                             ) : (
-                                // AI message - left-aligned, gray background
+                                // AI message - left-aligned, gray background, consistent max width
                                 <div className='flex justify-start'>
-                                    <div className='max-w-xs lg:max-w-2xl px-4 py-2 bg-gray-100 text-gray-800 rounded-2xl rounded-bl-md'>
+                                    <div className='max-w-2xl px-4 py-2 bg-gray-100 text-gray-800 rounded-2xl rounded-bl-md'>
                                         {message.isLoading ? (
                                         <p className='text-gray-500'>Thinking...</p>
                                         ) : (
-                                        <p className='whitespace-pre-wrap'>{message.content}</p>
+                                        <p className='whitespace-pre-wrap break-words'>{message.content}</p>
                                         )}
                                     </div>
                                 </div>
@@ -181,31 +183,35 @@ const Chat: React.FC<ChatProps> = ({
                 {/* Invisible element to enable auto-scroll */}
                 <div ref={messagesEndRef} />
             </div>
+        </div>
 
         {/* Fixed input form at bottom */}
-        <div className='flex-shrink-0 border-t bg-white p-4'>
+        <div className='flex-shrink-0 border-t border-gray-200 bg-white p-4'>
             <form onSubmit={handleSubmit}>
                 <div className='relative'>
                     {/* Message input field */}
                     <input
-                    className='w-full p-3 pr-12 border rounded-full'
+                    className='w-full p-3 pr-12 border border-gray-300 rounded-full focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent'
                     type="text"
                     value={inputValue}
                     onChange={(e) => setInputValue(e.target.value)}
                     placeholder="Type your message..."
                     />
                     {/* Send button - disabled when loading or input empty */}
-                    <button className='absolute right-2 top-1/2 transform -translate-y-1/2 w-8 h-8 bg-purple-600 text-white rounded-full flex items-center justify-center disabled:bg-gray-400' type="submit" disabled={isLoading || !inputValue.trim()}>
-                    
-                      {isLoading ? (
-                          // Loading indicator
-                          <span className='text-xs'>•••</span>
-                      ) : (
-                          // Send arrow icon
-                          <svg className='w-4 h-4' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
-                          <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M5 10l7-7m0 0l7 7m-7-7v18' />
-                          </svg>
-                      )}
+                    <button 
+                        className='absolute right-2 top-1/2 transform -translate-y-1/2 w-8 h-8 bg-purple-600 text-white rounded-full flex items-center justify-center disabled:bg-gray-400 transition-colors' 
+                        type="submit" 
+                        disabled={isLoading || !inputValue.trim()}
+                    >
+                        {isLoading ? (
+                            // Loading indicator
+                            <span className='text-xs'>•••</span>
+                        ) : (
+                            // Send arrow icon
+                            <svg className='w-4 h-4' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
+                            <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M5 10l7-7m0 0l7 7m-7-7v18' />
+                            </svg>
+                        )}
                     </button>
                 </div>
             </form>
