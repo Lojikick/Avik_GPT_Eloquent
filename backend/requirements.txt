@@ -1,4 +1,4 @@
-# Updated requirements.txt based on your working environment
+
 fastapi==0.104.1
 uvicorn==0.24.0
 pydantic==2.11.2
@@ -17,7 +17,7 @@ pinecone-client==6.0.0
 langsmith==0.4.13
 langchain-text-splitters==0.3.9
 
-# Additional dependencies that might be needed
+
 httpx==0.25.1
 anyio==3.7.1
 starlette==0.27.0

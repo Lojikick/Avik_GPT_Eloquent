@@ -1,70 +1,78 @@
 # main.py
 from fastapi import FastAPI, HTTPException, Cookie, Response
-from fastapi.middleware.cors import CORSMiddleware  # Add this import
+from fastapi.middleware.cors import CORSMiddleware
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from pydantic import BaseModel
 from rag_services import get_rag_service
 from session_services import get_session_service
-from auth_service import AuthService, UserCreate, UserLogin  # Add this
-from config import get_settings  # Add this
+from auth_service import AuthService, UserCreate, UserLogin
+from config import get_settings
 import logging
 import uvicorn
 
-# Configure logging
+# Configure application logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-settings = get_settings()  # Add this line
+# Load configuration settings
+settings = get_settings()
+
+# Initialize FastAPI application
 app = FastAPI(title="RAG Chatbot API", version="1.0.0")
 
-#local_temporary_store
+# Legacy dummy variables - consider removing if no longer needed
 dummy_user_id = "0"
 dummy_session_id = "0"
 
-
-
-# Add CORS middleware
+# CORS middleware - enables frontend-backend communication
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.cors_origins,  # Next.js default port
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=settings.cors_origins,    # Allowed frontend domains
+    allow_credentials=True,                 # Enable cookies/auth headers
+    allow_methods=["*"],                    # Allow all HTTP methods
+    allow_headers=["*"],                    # Allow all request headers
 )
 
+# Pydantic models for request validation
 
+# Request model for chat prompts
 class UserPrompt(BaseModel):
-    prompt: str 
-    session_id: str
+    prompt: str         # User's message/question
+    session_id: str     # Chat session identifier
 
+# Request model for creating new chat sessions
 class CreateSessionRequest(BaseModel):
-    user_id: str
+    user_id: str        # User identifier (registered or anonymous)
 
-# Initialize service on startup
+# Application startup - initialize all services
 @app.on_event("startup")
 async def startup_event():
     try:
-        # This will initialize the RAG service
+        # Initialize RAG (Retrieval-Augmented Generation) service
         get_rag_service()
-        # This will initialize the Session service
+        # Initialize session management service
         get_session_service()
         logger.info("RAG service initialized successfully")
     except Exception as e:
         logger.error(f"Failed to initialize RAG service: {e}")
         raise
 
+# Basic health check endpoint
 @app.get("/")
 async def root():
     return {"message": "RAG Chatbot API", "status": "healthy"}
 
+# Main chat endpoint - processes user messages and returns AI responses
 @app.post("/api/chat/prompt")
 async def make_prompt(request: UserPrompt):
     try:
-        print("What is wrong here")
         rag_service = get_rag_service()
         session_service = get_session_service()
+        
+        # Store user message in session history
         session_service.add_message(request.session_id, "user", request.prompt)
         
+        # Convert session history to LangChain message format
         raw_messages = session_service.get_session_messages(request.session_id)
         langchain_messages = []
         for msg in raw_messages:
@@ -72,9 +80,12 @@ async def make_prompt(request: UserPrompt):
                 langchain_messages.append(HumanMessage(content=msg["content"]))
             elif msg["type"] == "ai":
                 langchain_messages.append(AIMessage(content=msg["content"]))
+        
+        # Get AI response using RAG (context + conversation history)
         response = rag_service.get_response(request.prompt, langchain_messages)
+        
+        # Store AI response in session history
         session_service.add_message(request.session_id, "ai", response["answer"])
-        # print("Messages in the database:", session_service.get_session_messages(dummy_session_id))
        
         return {
             "userPrompt": request.prompt,
@@ -84,6 +95,7 @@ async def make_prompt(request: UserPrompt):
         logger.error(f"Error processing prompt: {e}")
         raise HTTPException(status_code=500, detail="Error processing your request")
 
+# Get chat history for a specific session
 @app.get("/api/chat/messages/{session_id}")
 async def get_session_messages(session_id: str, limit: int = 50):
     """Get messages for a session with optional limit"""
@@ -91,7 +103,7 @@ async def get_session_messages(session_id: str, limit: int = 50):
         session_service = get_session_service()
         messages = session_service.get_session_messages(session_id, limit)
         
-        # Convert LangChain messages back to JSON format for frontend
+        # Convert database format to frontend-expected format
         message_data = [
             {   
                 "id": msg["message_id"],
@@ -101,7 +113,6 @@ async def get_session_messages(session_id: str, limit: int = 50):
             for msg in messages
         ]
         
-        print("Returning the following message_data: ", message_data)
         return {
             "session_id": session_id,
             "messages": message_data,
@@ -111,10 +122,10 @@ async def get_session_messages(session_id: str, limit: int = 50):
         logger.error(f"Error getting messages: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+# Get all chat sessions for a user (for sidebar display)
 @app.get("/api/users/{user_id}/sessions")
 async def get_user_sessions(user_id: str, limit: int = 10):
     """Get all chat sessions for a user"""
-    print("Did I even make it here?")
     try:
         session_service = get_session_service()
         sessions = session_service.get_user_sessions(user_id, limit)
@@ -123,17 +134,20 @@ async def get_user_sessions(user_id: str, limit: int = 10):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+# Create new chat session with smart logic for user types
 @app.post("/api/sessions")
 async def create_new_session(request: CreateSessionRequest):
     """Create new session - smart logic for anonymous vs registered users"""
     try:
         session_service = get_session_service()
+        # Smart logic handles different behavior for anonymous vs registered users
         session_id = session_service.create_session_smart(request.user_id)
         
         return {"session_id": session_id}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+# Delete a chat session
 @app.delete("/api/sessions/{session_id}")
 async def delete_session(session_id: str):
     """Delete a chat session"""
@@ -144,6 +158,7 @@ async def delete_session(session_id: str):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
     
+# Application health check endpoint
 @app.get("/health")
 async def health_check():
     return {"status": "healthy", "message": "Service is running"}
@@ -151,27 +166,30 @@ async def health_check():
 
 ## AUTHENTICATION SERVICES ##
 
-# Initialize auth service
+# Factory function to create auth service with dependencies
 def get_auth_service():
     session_service = get_session_service()
     return AuthService(session_service, session_service.users)
 
+# User registration endpoint with optional anonymous user linking
 @app.post("/api/auth/register")
 async def register(user_data: UserCreate, response: Response, anonymous_user_id: str = None):
     try:
         auth_service = get_auth_service()
+        # Register user and optionally link existing anonymous sessions
         result = auth_service.register_user(user_data, anonymous_user_id)
         
-        # Set JWT in httpOnly cookie
+        # Set JWT token in secure HTTP-only cookie
         response.set_cookie(
             key="auth_token",
             value=result["token"],
-            httponly=True,
-            secure=False,  # Set to True in production with HTTPS
-            samesite="lax",
-            max_age=settings.jwt_expiration_hours * 3600
+            httponly=True,                                      # Prevents XSS attacks
+            secure=False,                                       # Set to True in production with HTTPS
+            samesite="lax",                                     # CSRF protection
+            max_age=settings.jwt_expiration_hours * 3600        # Cookie expiration
         )
         
+        # Return user data (without sensitive token)
         return {
             "user_id": result["user_id"],
             "email": result["email"],
@@ -181,13 +199,14 @@ async def register(user_data: UserCreate, response: Response, anonymous_user_id:
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
+# User login endpoint
 @app.post("/api/auth/login")
 async def login(login_data: UserLogin, response: Response):
     try:
         auth_service = get_auth_service()
         result = auth_service.login_user(login_data)
         
-        # Set JWT in httpOnly cookie
+        # Set JWT token in secure HTTP-only cookie
         response.set_cookie(
             key="auth_token",
             value=result["token"],
@@ -206,22 +225,28 @@ async def login(login_data: UserLogin, response: Response):
     except ValueError as e:
         raise HTTPException(status_code=401, detail=str(e))
 
+# User logout endpoint
 @app.post("/api/auth/logout")
 async def logout(response: Response):
+    # Clear authentication cookie
     response.delete_cookie("auth_token")
     return {"message": "Logged out successfully"}
 
+# Get current authenticated user info
 @app.get("/api/auth/me")
 async def get_current_user(auth_token: str = Cookie(None)):
+    # Check if auth token exists in cookies
     if not auth_token:
         raise HTTPException(status_code=401, detail="Not authenticated")
     
     auth_service = get_auth_service()
+    # Verify and decode JWT token
     payload = auth_service.verify_token(auth_token)
     
     if not payload:
         raise HTTPException(status_code=401, detail="Invalid token")
     
+    # Fetch user data from database
     user = auth_service.users.find_one({"user_id": payload["user_id"]})
     if not user:
         raise HTTPException(status_code=401, detail="User not found")

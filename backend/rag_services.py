@@ -12,82 +12,107 @@ from langchain_pinecone import PineconeEmbeddings
 from config import get_settings
 
 
-# Custom Pinecone Embeddings class
-# class PineconeEmbeddings(Embeddings):
-#     def __init__(self, model: str, pinecone_api_key: str):
-#         self.pc = Pinecone(api_key=pinecone_api_key)
-#         self.model = model
-    
-#     def embed_documents(self, texts: List[str]) -> List[List[float]]:
-#         response = self.pc.inference.embed(
-#             model=self.model,
-#             inputs=texts,
-#             parameters={"input_type": "passage"}
-#         )
-#         return [item.values for item in response.data]
-    
-#     def embed_query(self, text: str) -> List[float]:
-#         response = self.pc.inference.embed(
-#             model=self.model,
-#             inputs=[text],
-#             parameters={"input_type": "query"}
-#         )
-#         return response.data[0].values
-
-
 class RAGService:
+    """
+    Retrieval-Augmented Generation (RAG) Service
+    
+    Combines vector search with language models to provide contextually relevant responses.
+    Flow: User Query → Vector Search → Retrieve Context → Generate Response with Context
+    """
+    
     def __init__(self):
         self.settings = get_settings()
         self._initialize_components()
         
     def _initialize_components(self):
-        # Initialize Pinecone
+        """Initialize all RAG system components in proper order"""
+        
+        # 1. Initialize Pinecone client for vector database operations
         self.pc = Pinecone(
             api_key=self.settings.pinecone_api_key
         )
                 
-        # Initialize embeddings with custom PineconeEmbeddings
+        # 2. Initialize embeddings model - converts text to vectors
+        # Uses Pinecone's embedding service with configured model (llama-text-embed-v2)
         self.embeddings = PineconeEmbeddings(
             model=self.settings.embedding_model,
             pinecone_api_key=self.settings.pinecone_api_key
         )
                 
-        # Initialize vector store
+        # 3. Initialize vector store - manages document storage and retrieval
         self.docsearch = PineconeVectorStore(
-            embedding=self.embeddings,
-            index_name=self.settings.pinecone_index_name,
-            pinecone_api_key=self.settings.pinecone_api_key,
-            text_key="text"
+            embedding=self.embeddings,                          # Embedding function
+            index_name=self.settings.pinecone_index_name,      # Pinecone index name
+            pinecone_api_key=self.settings.pinecone_api_key,   # Authentication
+            text_key="text"                                     # Field name for document text
         )
                 
-        # Initialize retriever
+        # 4. Create retriever - handles similarity search for relevant documents
         self.retriever = self.docsearch.as_retriever()
                 
-        # Initialize LLM
+        # 5. Initialize Large Language Model (LLM) - generates responses
         self.llm = ChatGoogleGenerativeAI(
             google_api_key=self.settings.google_api_key,
-            model=self.settings.llm_model,
-            temperature=self.settings.llm_temperature
+            model=self.settings.llm_model,                     # gemini-1.5-flash
+            temperature=self.settings.llm_temperature          # Controls response creativity (0.7)
         )
                 
-        # Initialize chains
+        # 6. Initialize LangChain chains - orchestrates RAG workflow
+        
+        # Pull pre-built prompt template for retrieval-based Q&A with chat history
         self.ret_qa_chat_prompt = hub.pull("langchain-ai/retrieval-qa-chat")
+        
+        # Create document combination chain - formats retrieved docs for LLM
         self.combined_chain = create_stuff_documents_chain(
             self.llm, self.ret_qa_chat_prompt
         )
+        
+        # Create full retrieval chain - combines retrieval + generation
         self.retrieval_chain = create_retrieval_chain(
             self.retriever, self.combined_chain
         )
         
     def get_response(self, query: str, session_messages: list) -> dict:
-        """Get response from RAG system"""
+        """
+        Main RAG pipeline method
+        
+        Args:
+            query: User's current question/message
+            session_messages: Previous conversation history as LangChain messages
+            
+        Returns:
+            dict: Contains AI response and retrieved context documents
+            
+        Workflow:
+        1. Convert query to vector embedding
+        2. Search vector database for similar documents
+        3. Retrieve relevant context documents
+        4. Combine context + chat history + current query
+        5. Generate response using LLM with full context
+        """
         try:
-            answer = self.retrieval_chain.invoke({"input": query, "chat_history": session_messages})
-            return {"answer": answer["answer"], "context": answer.get("context", [])}
+            # Invoke the complete RAG chain
+            answer = self.retrieval_chain.invoke({
+                "input": query,                    # Current user question
+                "chat_history": session_messages  # Previous conversation for context
+            })
+            
+            return {
+                "answer": answer["answer"],                    # Generated response
+                "context": answer.get("context", [])          # Retrieved documents used
+            }
         except Exception as e:
             raise Exception(f"Error processing query: {str(e)}")
 
+# Singleton pattern - ensures only one RAG service instance exists
 @lru_cache()
 def get_rag_service():
-    """Singleton pattern for RAG service"""
+    """
+    Factory function that returns cached RAG service instance
+    
+    Benefits:
+    - Prevents expensive re-initialization of models and connections
+    - Ensures consistent service state across requests
+    - Improves API response times after first initialization
+    """
     return RAGService()
