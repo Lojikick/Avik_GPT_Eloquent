@@ -5,7 +5,6 @@ import { apiService } from '../lib/api';
 import { Message } from '@/types/message';
 
 //Chat View - Allows users to interact with the chatbot, start new initialized conversations, and view their conversation history,
-// Fetches conversation data from the backend via the currentSessionId passed in from the MainApp component 
 // Handles the transaction flow of: receive initial message → auto-send → load history → handle new messages → manage loading states → auto-scroll
 
 // Props interface - manages chat session and initial message handling
@@ -28,6 +27,10 @@ const Chat: React.FC<ChatProps> = ({
   // References for auto-scrolling functionality
   const messagesEndRef = useRef<HTMLDivElement>(null);        // Invisible div at bottom of messages
   const messagesContainerRef = useRef<HTMLDivElement>(null);  // Scrollable messages container
+  
+  // Streaming text state
+  const [streamingMessageId, setStreamingMessageId] = useState<string | null>(null);
+  const streamingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   
   // Smoothly scroll to bottom of messages
   const scrollToBottom = () => {
@@ -56,22 +59,57 @@ const Chat: React.FC<ChatProps> = ({
     }
   }, [initialMessage]);
 
-  // Auto-submit initial message when it's set in input
-  // useEffect(() => {
-  //   if (initialMessage && inputValue === initialMessage && inputValue.trim()) {
-  //       handleSubmit({ preventDefault: () => {} } as React.FormEvent); // Simulate form submission
-  //       if (onMessageSent) {
-  //       onMessageSent(); // Notify parent to clear initial message
-  //       }
-  //   }
-  //   }, [inputValue, initialMessage]);
-
   // Load chat history when session changes
   useEffect(() => {
     if (currentSessionId) {
       loadChatHistory(currentSessionId);
     }
   }, [currentSessionId]);
+
+  // Streaming text animation function
+  const animateText = (messageId: string, fullText: string) => {
+    let currentIndex = 0;
+    setStreamingMessageId(messageId);
+    
+    const typeNextCharacter = () => {
+      if (currentIndex < fullText.length) {
+        const currentText = fullText.substring(0, currentIndex + 1);
+        
+        setMessages(prev => 
+          prev.map(msg => 
+            msg.id === messageId 
+              ? { ...msg, content: currentText, isLoading: false }
+              : msg
+          )
+        );
+        
+        currentIndex++;
+        
+        // Variable speed: slower for punctuation, faster for regular characters
+        const char = fullText[currentIndex - 1];
+        const delay = char === '.' || char === '!' || char === '?' ? 60 : 
+                     char === ',' || char === ';' ? 40 : 
+                     char === ' ' ? 15 : 10;
+        
+        streamingTimeoutRef.current = setTimeout(typeNextCharacter, delay);
+      } else {
+        // Animation complete
+        setStreamingMessageId(null);
+        streamingTimeoutRef.current = null;
+      }
+    };
+    
+    typeNextCharacter();
+  };
+
+  // Clean up timeout on component unmount
+  useEffect(() => {
+    return () => {
+      if (streamingTimeoutRef.current) {
+        clearTimeout(streamingTimeoutRef.current);
+      }
+    };
+  }, []);
 
   // Handle form submission and API communication
   const handleSubmit = async (e: React.FormEvent) => {
@@ -111,19 +149,13 @@ const Chat: React.FC<ChatProps> = ({
       // Send message to API and get AI response
       const result = await apiService.sendPrompt(inputValue, currentSessionId!);
       
-      // Update loading message with actual AI response
-      setMessages(prev => 
-        prev.map(msg => 
-          msg.id === aiMessageId 
-            ? { ...msg, content: result.llm_response, isLoading: false }
-            : msg
-        )
-      );
+      // Start streaming animation instead of immediate update
+      animateText(aiMessageId, result.llm_response);
       
     } catch (error) {
         console.error('Error:', error);
     
-        // Update loading message with error message
+        // Update loading message with error message (no animation for errors)
         setMessages(prev => 
           prev.map(msg => 
             msg.id === aiMessageId 
@@ -170,9 +202,15 @@ const Chat: React.FC<ChatProps> = ({
                                 <div className='flex justify-start'>
                                     <div className='max-w-2xl px-4 py-2 bg-gray-100 text-gray-800 rounded-2xl rounded-bl-md'>
                                         {message.isLoading ? (
-                                        <p className='text-gray-500'>Thinking...</p>
+                                            <p className='text-gray-500'>Thinking...</p>
                                         ) : (
-                                        <p className='whitespace-pre-wrap break-words'>{message.content}</p>
+                                            <div className='whitespace-pre-wrap break-words'>
+                                                {message.content}
+                                                {/* Add blinking cursor during streaming */}
+                                                {streamingMessageId === message.id && (
+                                                    <span className='animate-pulse ml-1 text-gray-400'>|</span>
+                                                )}
+                                            </div>
                                         )}
                                     </div>
                                 </div>

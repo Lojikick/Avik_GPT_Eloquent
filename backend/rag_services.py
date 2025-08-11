@@ -11,6 +11,33 @@ from langchain_core.embeddings import Embeddings
 from langchain_pinecone import PineconeEmbeddings
 from config import get_settings
 
+# Note: Custom PineconeEmbeddings class is commented out - now using built-in version
+# This was likely a previous implementation before langchain_pinecone provided direct support
+
+# Custom Pinecone Embeddings class (DEPRECATED - kept for reference)
+# class PineconeEmbeddings(Embeddings):
+#     def __init__(self, model: str, pinecone_api_key: str):
+#         self.pc = Pinecone(api_key=pinecone_api_key)
+#         self.model = model
+    
+#     def embed_documents(self, texts: List[str]) -> List[List[float]]:
+#         # Convert text documents to vector embeddings for storage
+#         response = self.pc.inference.embed(
+#             model=self.model,
+#             inputs=texts,
+#             parameters={"input_type": "passage"}  # Optimized for document storage
+#         )
+#         return [item.values for item in response.data]
+    
+#     def embed_query(self, text: str) -> List[float]:
+#         # Convert user query to vector embedding for similarity search
+#         response = self.pc.inference.embed(
+#             model=self.model,
+#             inputs=[text],
+#             parameters={"input_type": "query"}  # Optimized for search queries
+#         )
+#         return response.data[0].values
+
 
 class RAGService:
     """
@@ -59,12 +86,36 @@ class RAGService:
                 
         # 6. Initialize LangChain chains - orchestrates RAG workflow
         
-        # Pull pre-built prompt template for retrieval-based Q&A with chat history
-        self.ret_qa_chat_prompt = hub.pull("langchain-ai/retrieval-qa-chat")
+        # Create custom prompt template for retrieval-based Q&A with chat history
+        from langchain_core.prompts import ChatPromptTemplate
         
-        # Create document combination chain - formats retrieved docs for LLM
+        self.custom_prompt = ChatPromptTemplate.from_messages([
+            ("system", """You are AvikGPT, a helpful AI assistant. Use the following context to answer the user's question. 
+            If the context doesn't contain relevant information, you can use your general knowledge but mention that you're drawing from general knowledge rather than the provided context.
+            
+            You should be great at covering the
+            most common questions users might have about creating and verifying an account, managing
+            payments and transfers, keeping their accounts secure, and understanding financial
+            regulations. It is organized into five main categories—Account & Registration, Payments &
+            Transactions, Security & Fraud Prevention, Regulations & Compliance, and Technical Support
+            & Troubleshooting—to provide comprehensive guidance on everything from setting up an
+            account to addressing fraud concerns and technical glitches.
+             
+            Context: {context}
+            
+            Chat History: {chat_history}
+            
+            Instructions:
+            - Be conversational and helpful
+            - Cite the context when relevant,  refer to the context as "our company polices" with the exact text in a natural manner
+            - If uncertain, acknowledge limitations
+            - Keep responses focused and concise"""),
+            ("human", "{input}")
+        ])
+        
+        # Create document combination chain with custom prompt
         self.combined_chain = create_stuff_documents_chain(
-            self.llm, self.ret_qa_chat_prompt
+            self.llm, self.custom_prompt
         )
         
         # Create full retrieval chain - combines retrieval + generation

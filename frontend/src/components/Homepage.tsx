@@ -31,7 +31,7 @@ const Homepage: React.FC<HomepageProps> = ({ onNewChatClick }) => {
       {/* Main welcome header */}
       <div className="text-center mb-12 max-w-2xl">
         <h1 className="text-4xl font-bold text-gray-800 mb-4">
-          Welcome
+          Welcome to AvikGPT
         </h1>
       </div>
 
