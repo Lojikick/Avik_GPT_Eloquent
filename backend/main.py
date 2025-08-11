@@ -8,6 +8,7 @@ from session_services import get_session_service
 from auth_service import AuthService, UserCreate, UserLogin  # Add this
 from config import get_settings  # Add this
 import logging
+import uvicorn
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -231,3 +232,11 @@ async def get_current_user(auth_token: str = Cookie(None)):
         "name": user["name"],
         "user_type": "registered"
     }
+
+# if __name__ == "__main__":
+#     uvicorn.run(
+#         "main:app", 
+#         host="0.0.0.0", 
+#         port=8000, 
+#         reload=True  # For development
+#     )

@@ -1,6 +1,6 @@
-# AvikGPT - AI-Powered Customer Service Agent
+AvikGPT - AI-Powered Customer Service Agent
 
-A full-stack AI chatbot application with user authentication, persistent chat history, and RAG (Retrieval-Augmented Generation) capabilities.
+Introducing AvikGPT! - An Customer service AI chatbot application with user authentication, persistent chat history, and RAG (Retrieval-Augmented Generation) capabilities.
 
 ## ✨ Features
 
@@ -61,15 +61,17 @@ To run locally without Docker:
 ### Backend
 ```bash
 cd backend
+python -m venv chatbotenv
+source chatbotenv/bin/activate
 pip install -r requirements.txt
-uvicorn main:app --reload
+uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
 ### Frontend
 ```bash
 cd frontend
 npm install
-npm run dev
+npx next dev -p 3000
 ```
 
 ## 📁 Project Structure
@@ -78,7 +80,7 @@ npm run dev
 ├── frontend/          # Next.js React application
 ├── backend/           # FastAPI Python server
 ├── docker-compose.yml # Container orchestration
-└── .env.example      # Environment template
+
 ```
 
 
