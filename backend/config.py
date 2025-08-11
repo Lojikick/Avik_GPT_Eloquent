@@ -4,7 +4,7 @@ from functools import lru_cache
 from pydantic_settings import BaseSettings
 
 class Settings(BaseSettings):
-    # Add these 2 lines only:
+    
     environment: str = "development"
     allowed_origins: list = ["http://localhost:3000"]  
 
@@ -21,11 +21,11 @@ class Settings(BaseSettings):
     jwt_expiration_hours: int = 24 * 7  # 7 days
 
     
-    # Add this property:
+    
     @property
     def cors_origins(self):
         if self.environment == "production":
-            return ["https://my-domain.com"]  # You'll set this later when you have a domain
+            return ["https://my-domain.com"]  
         return ["http://localhost:3000", "http://127.0.0.1:3000"]
     
     class Config:

@@ -8,7 +8,11 @@ import os
 class ChatSessionService:
     def __init__(self):
         settings = get_settings()
-        self.client = MongoClient(settings.mongodb_uri)
+        self.client = MongoClient(
+            settings.mongodb_uri, 
+            w=1,  # Write concern: wait for acknowledgment from primary
+            j=True  # Journal: wait for write to be written to journal
+        )
         self.db = self.client.chatbot_db
         
         # Your three collections

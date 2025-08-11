@@ -2,14 +2,18 @@
 
 import React, { useState, useEffect, useRef} from 'react';
 import { apiService } from '../lib/api';
-import Prompt from '@/components/Prompt';
-import Response from '@/components/Prompt';
 import { Message } from '@/types/message';
 
+//Chat View - Allows users to interact with the chatbot, start new initialized conversations, and view their conversation history,
+// Fetches conversation data from the backend via the currentSessionId passed in from the MainApp component 
+// Handles the transaction flow of: receive initial message → auto-send → load history → handle new messages → manage loading states → auto-scroll
+
+
+// Props interface - manages chat session and initial message handling
 interface ChatProps {
-    currentSessionId: string | null;
-    initialMessage?: string | null; // Add this
-    onMessageSent?: () => void; // Add this to clear initial message
+    currentSessionId: string | null;    // Active chat session ID
+    initialMessage?: string | null;     // Message to auto-send when chat opens
+    onMessageSent?: () => void;         // Callback to clear initial message after sending
 }
 
 const Chat: React.FC<ChatProps> = ({
@@ -17,57 +21,60 @@ const Chat: React.FC<ChatProps> = ({
     initialMessage,
     onMessageSent
   }) => {
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [inputValue, setInputValue] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
+  // Core chat state
+  const [messages, setMessages] = useState<Message[]>([]);     // All messages in current chat
+  const [inputValue, setInputValue] = useState('');           // Current input field value
+  const [isLoading, setIsLoading] = useState(false);          // Show loading state during API calls
   
-  // Ref for auto-scrolling
-  const messagesEndRef = useRef<HTMLDivElement>(null);
-  const messagesContainerRef = useRef<HTMLDivElement>(null);
+  // References for auto-scrolling functionality
+  const messagesEndRef = useRef<HTMLDivElement>(null);        // Invisible div at bottom of messages
+  const messagesContainerRef = useRef<HTMLDivElement>(null);  // Scrollable messages container
   
-  // Auto-scroll to bottom function
+  // Smoothly scroll to bottom of messages
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
-  // Scroll to bottom when messages change
+  // Auto-scroll when new messages are added
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
   
+  // Load chat history for a specific session
   const loadChatHistory = async (sessionId: string) => {
     try {
       const response = await apiService.getChatHistory(sessionId, 50);
-      
       setMessages(response.messages);
     } catch (error) {
       console.error('Error loading chat history:', error);
     }
   };
 
+  // Set input value when initial message is provided (from Homepage)
   useEffect(() => {
     if (initialMessage && initialMessage.trim()) {
         setInputValue(initialMessage);
     }
   }, [initialMessage]);
 
-// Separate useEffect to auto-submit when inputValue changes from initial message
-   useEffect(() => {
-    if (initialMessage && inputValue === initialMessage && inputValue.trim()) {
-        handleSubmit({ preventDefault: () => {} } as React.FormEvent);
-        if (onMessageSent) {
-        onMessageSent();
-        }
-    }
-    }, [inputValue, initialMessage]);
+  // Auto-submit initial message when it's set in input
+  // useEffect(() => {
+  //   if (initialMessage && inputValue === initialMessage && inputValue.trim()) {
+  //       handleSubmit({ preventDefault: () => {} } as React.FormEvent); // Simulate form submission
+  //       if (onMessageSent) {
+  //       onMessageSent(); // Notify parent to clear initial message
+  //       }
+  //   }
+  //   }, [inputValue, initialMessage]);
 
-  // Load history when session changes
+  // Load chat history when session changes
   useEffect(() => {
     if (currentSessionId) {
       loadChatHistory(currentSessionId);
     }
   }, [currentSessionId]);
 
+  // Handle form submission and API communication
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
@@ -75,6 +82,7 @@ const Chat: React.FC<ChatProps> = ({
 
     const messageContent = inputValue.trim();
 
+    // Create and add user message to chat
     const userMessage: Message = {
         id: `user-${Date.now()}`,
         type: 'user',
@@ -85,6 +93,7 @@ const Chat: React.FC<ChatProps> = ({
     setMessages(prev => [...prev, userMessage]);
     
 
+    // Create placeholder AI message with loading state
     const aiMessageId = `ai-${Date.now()}`;
     const loadingMessage: Message = {
         id: aiMessageId,
@@ -96,11 +105,14 @@ const Chat: React.FC<ChatProps> = ({
     
     setMessages(prev => [...prev, loadingMessage]);
 
-    setInputValue("")
+    setInputValue("") // Clear input immediately
     setIsLoading(true);
     
     try {
+      // Send message to API and get AI response
       const result = await apiService.sendPrompt(inputValue, currentSessionId!);
+      
+      // Update loading message with actual AI response
       setMessages(prev => 
         prev.map(msg => 
           msg.id === aiMessageId 
@@ -112,7 +124,7 @@ const Chat: React.FC<ChatProps> = ({
     } catch (error) {
         console.error('Error:', error);
     
-        // Update the AI message with error and remove loading
+        // Update loading message with error message
         setMessages(prev => 
           prev.map(msg => 
             msg.id === aiMessageId 
@@ -127,27 +139,32 @@ const Chat: React.FC<ChatProps> = ({
 
   return (
     <div className='h-screen flex flex-col max-w-4xl mx-auto text-black'>
+        {/* Fixed header */}
         <h1 className='text-center text-2xl font-bold py-4 flex-shrink-0'>AvikGPT</h1>
 
-        {/* Messages Container - Single scrollable area */}
+        {/* Scrollable messages area */}
         <div 
             ref={messagesContainerRef}
             className='flex-1 overflow-y-auto space-y-4 px-4'
         >
+                {/* Show placeholder when no messages */}
                 {messages.length === 0 ? (
                     <div className='flex items-center justify-center h-64 text-gray-500'>
                         <p>Start a conversation...</p>
                     </div>
                 ) : (
+                    // Render all messages
                     messages.map((message) => (
                         <div key={message.id}>
                             {message.type === 'user' ? (
+                                // User message - right-aligned, purple background
                                 <div className='flex justify-end'>
                                     <div className='max-w-xs lg:max-w-md px-4 py-2 bg-purple-500 text-white rounded-2xl rounded-br-md'>
                                         <p>{message.content}</p>
                                     </div>
                                 </div>
                             ) : (
+                                // AI message - left-aligned, gray background
                                 <div className='flex justify-start'>
                                     <div className='max-w-xs lg:max-w-2xl px-4 py-2 bg-gray-100 text-gray-800 rounded-2xl rounded-bl-md'>
                                         {message.isLoading ? (
@@ -161,14 +178,15 @@ const Chat: React.FC<ChatProps> = ({
                         </div>
                     ))
                 )}
-                {/* Invisible div to scroll to */}
+                {/* Invisible element to enable auto-scroll */}
                 <div ref={messagesEndRef} />
             </div>
 
-        {/* Input Form - Fixed at bottom */}
+        {/* Fixed input form at bottom */}
         <div className='flex-shrink-0 border-t bg-white p-4'>
             <form onSubmit={handleSubmit}>
                 <div className='relative'>
+                    {/* Message input field */}
                     <input
                     className='w-full p-3 pr-12 border rounded-full'
                     type="text"
@@ -176,15 +194,18 @@ const Chat: React.FC<ChatProps> = ({
                     onChange={(e) => setInputValue(e.target.value)}
                     placeholder="Type your message..."
                     />
+                    {/* Send button - disabled when loading or input empty */}
                     <button className='absolute right-2 top-1/2 transform -translate-y-1/2 w-8 h-8 bg-purple-600 text-white rounded-full flex items-center justify-center disabled:bg-gray-400' type="submit" disabled={isLoading || !inputValue.trim()}>
                     
-                    {isLoading ? (
-                        <span className='text-xs'>•••</span>
-                    ) : (
-                        <svg className='w-4 h-4' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
-                        <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M5 10l7-7m0 0l7 7m-7-7v18' />
-                        </svg>
-                    )}
+                      {isLoading ? (
+                          // Loading indicator
+                          <span className='text-xs'>•••</span>
+                      ) : (
+                          // Send arrow icon
+                          <svg className='w-4 h-4' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
+                          <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M5 10l7-7m0 0l7 7m-7-7v18' />
+                          </svg>
+                      )}
                     </button>
                 </div>
             </form>
