@@ -17,11 +17,11 @@ class Settings(BaseSettings):
     
     # Pinecone vector database configuration
     pinecone_environment: str = "us-east-1-aws"                    # Pinecone cloud region
-    pinecone_index_name: str = "ai-powered-chatbot-challenge"      # Vector index name for embeddings
+    pinecone_index_name: str = "auto-fin-chat"      # Vector index name for embeddings
     
     # AI model configuration
     embedding_model: str = "llama-text-embed-v2"     # Model for converting text to vectors
-    llm_model: str = "gemini-1.5-flash"              # Large language model for chat responses
+    llm_model: str = "gemini-2.0-flash"              # Large language model for chat responses
     llm_temperature: float = 0.7                     # Controls randomness in AI responses (0.0 = deterministic, 1.0 = creative)
     
     # JWT authentication configuration

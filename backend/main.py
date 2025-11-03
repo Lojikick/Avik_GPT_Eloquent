@@ -89,7 +89,14 @@ async def make_prompt(request: UserPrompt):
        
         return {
             "userPrompt": request.prompt,
-            "llm_response": response["answer"]
+            "llm_response": response["answer"],
+            "retrieved_context": [  # Debug: Return retrieved documents
+                {
+                    "content": doc.page_content,
+                    "metadata": doc.metadata
+                }
+                for doc in response.get("context", [])
+            ]
         }
     except Exception as e:
         logger.error(f"Error processing prompt: {e}")

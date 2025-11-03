@@ -10,6 +10,11 @@ from langchain import hub
 from langchain_core.embeddings import Embeddings
 from langchain_pinecone import PineconeEmbeddings
 from config import get_settings
+from langchain_core.prompts import ChatPromptTemplate
+import logging
+
+# Set up logger for debugging
+logger = logging.getLogger(__name__)
 
 
 class RAGService:
@@ -48,7 +53,10 @@ class RAGService:
         )
                 
         # 4. Create retriever - handles similarity search for relevant documents
-        self.retriever = self.docsearch.as_retriever()
+        self.retriever = self.docsearch.as_retriever(
+            search_type="similarity",
+            search_kwargs={"k": 10, "score_threshold": 0.3}
+        )
                 
         # 5. Initialize Large Language Model (LLM) - generates responses
         self.llm = ChatGoogleGenerativeAI(
@@ -59,12 +67,33 @@ class RAGService:
                 
         # 6. Initialize LangChain chains - orchestrates RAG workflow
         
-        # Pull pre-built prompt template for retrieval-based Q&A with chat history
-        self.ret_qa_chat_prompt = hub.pull("langchain-ai/retrieval-qa-chat")
+        # Create custom prompt template for auto finance assistance
         
-        # Create document combination chain - formats retrieved docs for LLM
+        self.custom_prompt = ChatPromptTemplate.from_messages([
+            ("system", """You are an Auto Finance Assistant for consumers. Answer using only the retrieved context unless
+            the user asks for general background. If context is insufficient, say so and suggest the next step
+            (e.g., check underwriting requirements or compare lender offers).
+
+            Output format:
+            1) Direct answer (2–5 sentences, plain language)
+            2) Key factors and tradeoffs (bulleted)
+            3) Example or rule of thumb if helpful
+            4) Next steps for the user - ask them if they want to know more in a particular area
+
+            Style rules:
+            - Define terms briefly when first used (APR, down payment, residual value, LTV).
+            - Be neutral and educational. No financial advice.
+            - Prefer concrete comparisons, not vague statements.
+
+            Context: {context}
+
+            Chat History: {chat_history}"""),
+                        ("human", "{input}")
+        ])
+        
+        # Create document combination chain with custom prompt
         self.combined_chain = create_stuff_documents_chain(
-            self.llm, self.ret_qa_chat_prompt
+            self.llm, self.custom_prompt
         )
         
         # Create full retrieval chain - combines retrieval + generation
@@ -96,6 +125,7 @@ class RAGService:
                 "input": query,                    # Current user question
                 "chat_history": session_messages  # Previous conversation for context
             })
+            
             
             return {
                 "answer": answer["answer"],                    # Generated response

@@ -23,8 +23,8 @@ class ChatSessionService:
         # Initialize MongoDB client with write safety settings
         self.client = MongoClient(
             settings.mongodb_uri, 
-            w=1,    # Write concern: wait for acknowledgment from primary node
-            j=True  # Journal: wait for write to be committed to journal (durability)
+            w=1,        # Write concern: wait for acknowledgment from primary node
+            journal=True  # Journal: wait for write to be committed to journal (durability)
         )
         self.db = self.client.chatbot_db
         
