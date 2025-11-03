@@ -96,11 +96,47 @@ class RAGService:
             self.llm, self.custom_prompt
         )
         
-        # Create full retrieval chain - combines retrieval + generation
-        self.retrieval_chain = create_retrieval_chain(
-            self.retriever, self.combined_chain
+    def _rerank_documents(self, query: str, documents: list, top_k: int = 5, score_threshold: float = 0.7):
+        """
+        Re-rank documents using Pinecone's reranker
+        
+        Args:
+            query: User query
+            documents: List of Document objects from initial retrieval
+            top_k: Number of top results to return after reranking
+            score_threshold: Minimum rerank score to include (default: 0.7)
+        
+        Returns:
+            List of re-ranked Document objects that meet the score threshold
+        """
+        # Prepare documents for reranking
+        rerank_input = [
+            {"id": str(i), "text": doc.page_content}
+            for i, doc in enumerate(documents)
+        ]
+        
+        # Call Pinecone reranker API
+        reranked = self.pc.inference.rerank(
+            model="bge-reranker-v2-m3",  # Pinecone's reranking model
+            query=query,
+            documents=rerank_input,
+            top_n=top_k,
+            return_documents=True
         )
         
+        # Map reranked results back to original documents
+        # Only include documents that meet the score threshold
+        reranked_docs = []
+        for result in reranked.data:
+            # Filter by score threshold
+            if result.score >= score_threshold:
+                original_idx = int(result.document.id)
+                doc = documents[original_idx]
+                # Add rerank score to metadata
+                doc.metadata["rerank_score"] = result.score
+                reranked_docs.append(doc)
+        return reranked_docs
+
     def get_response(self, query: str, session_messages: list) -> dict:
         """
         Main RAG pipeline method
@@ -121,18 +157,41 @@ class RAGService:
         """
         try:
             # Invoke the complete RAG chain
-            answer = self.retrieval_chain.invoke({
+            initial_docs = self.retriever.get_relevant_documents(query)
+
+            logger.info(f"Initial retrieval: {len(initial_docs)} documents")
+
+            reranked_docs = self._rerank_documents(query, initial_docs, top_k=5)
+
+            logger.info(f"Reranked retrieval: {len(reranked_docs)} documents")
+
+            
+            
+            collected_context = [
+                {
+                    "content": doc.page_content,
+                    "metadata": doc.metadata
+                }
+                for doc in reranked_docs
+            ]
+
+            logger.info(f"Collected context: {collected_context}")
+
+            answer = self.combined_chain.invoke({
                 "input": query,                    # Current user question
-                "chat_history": session_messages  # Previous conversation for context
+                "chat_history": session_messages,  # Previous conversation for context
+                "context": reranked_docs            # Relevant context documents
             })
             
             
             return {
-                "answer": answer["answer"],                    # Generated response
-                "context": answer.get("context", [])          # Retrieved documents used
-            }
+                "answer": answer,  # answer is already a string
+                "retrieved_context": collected_context
+           }
         except Exception as e:
             raise Exception(f"Error processing query: {str(e)}")
+
+
 
 # Singleton pattern - ensures only one RAG service instance exists
 @lru_cache()
